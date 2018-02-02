@@ -40,26 +40,26 @@ const executor = new ExecutorPlugin(Object.assign(
     executorConfig[executorConfig.plugin].options
 ));
 
-// Source Code Plugin
-const scmConfig = { scms: config.get('scms') };
-const ScmPlugin = require('screwdriver-scm-router');
-const scm = new ScmPlugin(scmConfig || {});
-
-authConfig.scm = scm;
-
-// Plugin to upload artifacts to store
-const ArtifactPlugin = require('screwdriver-artifact-bookend');
-const artifact = new ArtifactPlugin(ecosystem.store);
-
 // Plugins to run before/after a build
 const bookends = config.get('bookends');
-const bookend = new Bookend({
-    scm,
-    'screwdriver-artifact-bookend': artifact
-},
-bookends.setup || [], // plugins required for the setup- steps
-bookends.teardown || [] // plugins required for the teardown- steps
+const bookendsPluginsArray = bookends.setup.concat(bookends.teardown).map((bookend) => {
+    // eslint-disable-next-line global-require
+    const BookendPlugin = require(bookend.plugin);
+    const instance = new BookendPlugin(bookend.config || {});
+
+    return { [bookend.name]: instance };
+});
+const bookendsPluginsObj = Object.assign(...bookendsPluginsArray);
+
+const bookend = new Bookend(
+    bookendsPluginsObj,
+    bookends.setup.map(b => b.name) || [], // plugins required for the setup- steps in order
+    bookends.teardown.map(b => b.name) || [] // plugins required for the teardown- steps in order
 );
+
+const scm = bookendsPluginsObj.scm;
+
+authConfig.scm = scm;
 
 // Setup Model Factories
 const Models = require('screwdriver-models');
